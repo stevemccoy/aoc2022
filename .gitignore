@@ -7,6 +7,10 @@
 *.o
 *.obj
 
+# Unwanted folders.
+*/Debug/*
+*/Release/*
+
 # Precompiled Headers
 *.gch
 *.pch
