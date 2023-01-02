@@ -8,8 +8,9 @@
 *.obj
 
 # Unwanted folders.
-*/Debug/*
-*/Release/*
+Debug/
+Release/
+.vs/
 
 # Precompiled Headers
 *.gch
