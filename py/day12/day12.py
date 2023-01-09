@@ -1,14 +1,18 @@
+#
+# Day 12 - Hill Climbing.
+# 
+# Uniform cost search for shortest path through finite grid search space.
+#
+
 import fileinput
 from glob import glob
 from xmlrpc.client import MAXINT
 import numpy as np
-import re
-
 
 # Globals.
 glob_goal = (0, 0)
-glob_elevation = np.array([])
-glob_costs = np.array([])
+glob_elevation = np.array([], dtype='i')
+glob_costs = np.array([], dtype='i')
 
 
 def read_input_lines(filename):
@@ -38,11 +42,13 @@ def get_start_end(elevation):
     return ((int(start[0]), int(start[1])), (int(end[0]), int(end[1])))
 
 # Set the global grids.
-def setGlobals(elevation, costs, goal):
+def setGlobals(elevation, costs, start, goal):
     global glob_elevation, glob_costs, glob_goal
     glob_elevation = elevation.copy()
     glob_costs = costs.copy()
     glob_goal = goal
+    glob_elevation[start[0], start[1]] = 1
+    glob_elevation[goal[0], goal[1]] = 26
 
 def isGoalState(s):
     global glob_goal
@@ -60,7 +66,7 @@ def neighbours(s):
         d = glob_elevation[r, c - 1] - h
         if d < 2:
             result.append((r, c - 1, v))
-    if c < glob_elevation.shape[1]:
+    if c < glob_elevation.shape[1] - 1:
         d = glob_elevation[r, c + 1] - h
         if d < 2:
             result.append((r, c + 1, v))
@@ -68,7 +74,7 @@ def neighbours(s):
         d = glob_elevation[r - 1, c] - h
         if d < 2:
             result.append((r - 1, c, v))
-    if r < glob_elevation.shape[0]:
+    if r < glob_elevation.shape[0] - 1:
         d = glob_elevation[r + 1, c] - h
         if d < 2:
             result.append((r + 1, c, v))
@@ -77,13 +83,11 @@ def neighbours(s):
 def push_open_list(item, open_list):
     (r, c, v) = item
     n = len(open_list)
-    if n == 0:
-        open_list.append(item)
-    else:
-        for i in range(n):
-            if open_list[i][2] >= v:
-                open_list.insert(i, item)
-                break
+    for i in range(n):
+        if open_list[i][2] > v:
+            open_list.insert(i, item)
+            return
+    open_list.append(item)
 
 def pop_open_list(open_list):
     if len(open_list) == 0:
@@ -91,52 +95,73 @@ def pop_open_list(open_list):
     else:
         return open_list.pop(0)
 
-def dijkstra_search(unvisited):
-    while len(unvisited) > 0:
-        s = pop_open_list(unvisited)
-        if isGoalState(s):
-            return s[2]
-        nlist = neighbours(s)
-        for n in nlist:
-            if n[2] < glob_costs[n[0], n[1]]:
-                set_cost(n[0], n[1], n[2])
-                push_open_list(n, unvisited)
+def find_loc_open_list(item, open_list):
+    r,c = item[:2]
+    for loc in open_list:
+        if loc[0] == r and loc[1] == c:
+            return loc
     return None
 
+def open_list_replace(open_list, item, replacement):
+    open_list.remove(item)
+    push_open_list(replacement, open_list)
+
+# Return the minimum path cost from start to a goal node.
+def uniform_cost_search(startNodes, goalTest):
+    frontier = [i for i in startNodes]
+    node = frontier[0]
+    expanded = []
+    while len(frontier) > 0:
+        node = pop_open_list(frontier)
+        if goalTest(node):
+            return node
+        expanded.append(node[:2])
+        nlist = neighbours(node)
+        for n in nlist:
+            fitem = find_loc_open_list(n, frontier)
+            if fitem:
+                if fitem[2] > n[2]:
+                    open_list_replace(frontier, fitem, n)
+                    set_cost(n[0], n[1], n[2])
+            elif n[:2] not in expanded:
+                push_open_list(n, frontier)
+                set_cost(n[0], n[1], n[2])
+    return None
 
 def part1(filename):
+    print('Part 1.')
     lines = read_input_lines(filename)
     (elevation, cost) = prepare_input(lines)
     (start, end) = get_start_end(elevation)
     print('Start at ', start, ', End at ', end )
-    setGlobals(elevation, cost, end)
+    setGlobals(elevation, cost, start, end)
     set_cost(start[0], start[1], 0)
-    open_list = [(start[0], start[1], 0)]
-    steps = dijkstra_search(open_list)
-    if steps:
-        print('Path found with ', steps, ' steps.')
+    node = uniform_cost_search([(start[0], start[1], 0)], isGoalState)
+    if node:
+        print('Path found with ', node[2], ' steps.')
     else:
         print('No path found.')
 
 def part2(filename):
-    total = 0
-    with fileinput.FileInput(files = (filename), mode = 'r') as input:
-        lines = []
-        for raw_line in input:
-            line = raw_line.strip(' \n')
-            if line != '':
-                lines.append(line)
-    for i in range(0, len(lines), 3):
-        elf0 = inventory(lines[i])
-        elf1 = inventory(lines[i + 1])
-        elf2 = inventory(lines[i + 2])
-        total += priority_score(common_item(elf0, elf1, elf2))
-    return total
+    print('Part 2.')
+    lines = read_input_lines(filename)
+    (elevation, cost) = prepare_input(lines)
+    (start, end) = get_start_end(elevation)
+    print('Start at ', start, ', End at ', end )
+    setGlobals(elevation, cost, start, end)
+    # Start at any square with an 'a':
+    starts = []
+    for idx,v in np.ndenumerate(glob_elevation):
+        if v == 1:
+            starts.append((idx[0], idx[1], 0))
+            set_cost(idx[0], idx[1], 0)
+    steps = uniform_cost_search(starts, isGoalState)
+    if steps:
+        print('Path found with ', steps[2], ' steps.')
+    else:
+        print('No path found.')
 
-print("Advent of Code 2022 - Day 12\nPart 1.")
-total_score = part1('test12.txt')
+print("Advent of Code 2022 - Day 12.")
+part1('day12.txt')
 
-print("Part 2.")
-#total_score = part2('day3.txt')
-print("Total score = ", total_score)
-
+part2('day12.txt')
