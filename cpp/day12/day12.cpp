@@ -42,16 +42,6 @@ void set_cost(int col, int row, int value) {
     costs[offset(col, row)] = value;
 }
 
-/*
-bool visible(int col, int row) {
-    return (costs[offset(col, row)] == 't');
-}
-
-void visible(int col, int row, bool value) {
-    costs[offset(col, row)] = (value ? 't' : 'f');
-}
-*/
-
 void setup(const std::vector<std::string>& lines) {
     num_rows = lines.size();
     num_cols = lines[0].size();
@@ -85,7 +75,6 @@ void setup(const std::vector<std::string>& lines) {
         }
         r++;
     }
-
 }
 
 typedef struct State {
@@ -95,70 +84,71 @@ typedef struct State {
 
     State() : column(0), row(0), cost(INT32_MAX) {}
     State(int c, int r, int v) : column(c), row(r), cost(v) {}
+    ~State() {}
 };
 
+typedef std::shared_ptr<State> StatePtr;
+
 struct StateCompare {
-    bool operator()(const State& s1, const State& s2) const /* noexcept */
+    bool operator()(const StatePtr& s1, const StatePtr& s2) const /* noexcept */
     {
-        return (s1.cost < s2.cost);
+        return (s1->cost < s2->cost);
     }
 };
 
-typedef std::multiset<State, StateCompare> OpenList;
+typedef std::multiset<StatePtr, StateCompare> OpenList;
 
-bool isGoalState(const State& s) {
-    return (get(s.column, s.row) == ('z' + 1));
+bool isGoalState(const StatePtr& s) {
+    return (get(s->column, s->row) == ('z' + 1));
 }
 
-void populate_neighbours(const State& from, std::vector<State>& neighbours) {
+
+
+void populate_neighbours(const StatePtr& from, std::vector<StatePtr>& neighbours) {
     neighbours.clear();
-    int c = from.column;
-    int r = from.row;
-    int v = from.cost;
+    int c = from->column;
+    int r = from->row;
+    int v = from->cost;
     int d = 0;
     int h = get(c, r);
-    State s;
+    StatePtr s = std::make_shared<State>();
     if (c > 0) {
         d = get(c - 1, r) - h;
-        if (d >= 0 && d < 2) {
-            s.column = c - 1;
-            s.row = r;
-            s.cost = v + 1;
+        if (d < 2) {
+            s.reset(new State(c - 1, r, v + 1));
+            //            s = std::make_shared<State>(c - 1, r, v + 1);
             neighbours.push_back(s);
         }
     }
     if (c < num_cols) {
         d = get(c + 1, r) - h;
-        if (d >= 0 && d < 2) {
-            s.column = c + 1;
-            s.row = r;
-            s.cost = v + 1;
+        if (d < 2) {
+            s.reset(new State(c + 1, r, v + 1));
+//            s = std::make_shared<State>(c + 1, r, v + 1);
             neighbours.push_back(s);
         }
     }
     if (r > 0) {
         d = get(c, r - 1) - h;
-        if (d >= 0 && d < 2) {
-            s.column = c;
-            s.row = r - 1;
-            s.cost = v + 1;
+        if (d < 2) {
+            s.reset(new State(c, r - 1, v + 1));
+//            s = std::make_shared<State>(c, r - 1, v + 1);
             neighbours.push_back(s);
         }
     }
     if (r < num_rows) {
         d = get(c, r + 1) - h;
-        if (d >= 0 && d < 2) {
-            s.column = c;
-            s.row = r + 1;
-            s.cost = v + 1;
+        if (d < 2) {
+            s.reset(new State(c, r + 1, v + 1));
+//            s = std::make_shared<State>(c, r + 1, v + 1);
             neighbours.push_back(s);
         }
     }
 }
 
 int dijkstra_search(OpenList& unvisited) {
-    State s;
-    std::vector<State> neighbours;
+    StatePtr s;
+    std::vector<StatePtr> neighbours;
     while (!unvisited.empty()) {
         // Pop minimum cost node off open list.
         auto bp = unvisited.begin();
@@ -166,13 +156,13 @@ int dijkstra_search(OpenList& unvisited) {
         unvisited.erase(bp);
         // Stop if this is a goal node.
         if (isGoalState(s)) {
-            return s.cost;
+            return s->cost;
         }
         // Consider neighbours.
         populate_neighbours(s, neighbours);
-        for (auto &n : neighbours) {
-            if (n.cost < get_cost(n.column, n.row)) {
-                set_cost(n.column, n.row, n.cost);
+        for (auto n : neighbours) {
+            if (n->cost < get_cost(n->column, n->row)) {
+                set_cost(n->column, n->row, n->cost);
                 unvisited.insert(n);
             }
         }
@@ -184,11 +174,10 @@ int dijkstra_search(OpenList& unvisited) {
 void setup_search(OpenList& unvisited) {
     unvisited.clear();
     // Find the starting node.
-    State s;
     for (int r = 0; r < num_rows; r++) {
         for (int c = 0; c < num_cols; c++) {
             if (get(c, r) == 'a' - 1) {
-                (s.column, s.row, s.cost) = (c, r, 0);
+                StatePtr s = std::make_shared<State>(c, r, 0);
                 unvisited.insert(s);
                 return;
             }
@@ -196,39 +185,28 @@ void setup_search(OpenList& unvisited) {
     }
 }
 
-/*
-int count_visibles()
-{
-    int count = 0;
+StatePtr find_goal() {
+    // Find the goal node.
     for (int r = 0; r < num_rows; r++) {
         for (int c = 0; c < num_cols; c++) {
-            if (visible(c, r)) {
-                count++;
+            if (get(c, r) == ('z' + 1)) {
+                StatePtr s = std::make_shared<State>(c, r, 0);
+                return s;
             }
         }
     }
-    return count;
+    return std::make_shared<State>();
 }
-
-void display()
-{
-    std::cout << std::endl;
-    for (int r = 0; r < num_rows; r++) {
-        for (int c = 0; c < num_cols; c++) {
-            std::cout << (char)(get(c, r) + '0') << (visible(c, r) ? '+' : '.');
-        }
-        std::cout << std::endl;
-    }
-}
-*/
 
 int main()
 {
     OpenList unvisited;
     std::cout << "Advent of Code 2022\nDay 12 -  Part 1." << std::endl;
-    auto lines = read_input_file("day12.txt");
+    auto lines = read_input_file("test12.txt");
     setup(lines);
     setup_search(unvisited);
+    auto goal = find_goal();
+    std::cout << "Goal node found at (" << goal->column << ", " << goal->row << ")." << std::endl;
     int cost = dijkstra_search(unvisited);
     std::cout << "Minimal path cost is " << cost << std::endl;
 }
